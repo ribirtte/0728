@@ -1,0 +1,9 @@
+lotto.env
+lotto.env.txt
+.env
+.env.*
+!lotto.env.example
+!*.env.example
+node_modules/
+.DS_Store
+Thumbs.db
