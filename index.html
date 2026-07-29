@@ -376,6 +376,8 @@
       height: auto;
       border-radius: 14px;
       background: #fff;
+      min-height: 340px;
+      object-fit: contain;
     }
 
     .card-hint {
@@ -1038,6 +1040,17 @@
     statusEl.textContent = location.protocol === 'file:'
       ? '파일로 열었습니다. server.ps1을 먼저 실행하세요.'
       : '준비 완료';
+
+    renderCard(
+      {
+        sign: ZODIAC_SIGNS[0],
+        numbers: [1, 7, 12, 18, 27, 33],
+        name: '',
+        dateLabel: '카드 미리보기',
+        signKey: ZODIAC_SIGNS[0].key
+      },
+      '생년월일을 입력하고 분석을 누르면 카드가 여기에 표시됩니다.'
+    );
   </script>
 </body>
 </html>
