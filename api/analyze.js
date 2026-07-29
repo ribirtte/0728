@@ -234,9 +234,9 @@ async function callHiggsfieldCard({ sign, numbers, birthDate, name, question, cr
     body: JSON.stringify({
       prompt,
       width_and_height: '1536x2048',
-      quality: '1080p',
-      enhance_prompt: false,
-      batch_size: 1
+      quality: 'HD',
+      batch_size: 1,
+      enhance_prompt: false
     })
   }, 20000);
 
@@ -260,7 +260,7 @@ async function callHiggsfieldCard({ sign, numbers, birthDate, name, question, cr
   let imageUrl = findFirstImageUrl(current);
   let status = getHiggsfieldStatus(current) || 'queued';
 
-  const deadline = Date.now() + 25000;
+  const deadline = Date.now() + 45000;
   while (!imageUrl && status !== 'failed' && status !== 'nsfw' && status !== 'canceled' && Date.now() < deadline && statusUrl) {
     await sleep(2000);
     const pollResponse = await fetchWithTimeout(statusUrl, {

@@ -940,10 +940,10 @@
       analyzeBtn.disabled = true;
       resetBtn.disabled = true;
       statusEl.textContent = '서버 연결을 시도하는 중...';
-      explanationEl.textContent = '로컬 결과를 유지한 채 서버 응답을 기다리고 있습니다.';
+      explanationEl.textContent = '로컬 결과를 유지한 채 서버 응답을 기다리고 있습니다. 최대 45초 정도 걸릴 수 있습니다.';
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const timeoutId = setTimeout(() => controller.abort(), 45000);
 
       try {
         const response = await fetch(apiUrl, {
@@ -983,9 +983,13 @@
           : localExplanation(nextProfile);
         explanationEl.textContent = explanation;
         renderCard(nextProfile, explanation, resultProfile.cardImageUrl || '');
-        statusEl.textContent = resultProfile.cardImageUrl
-          ? '설명과 카드 이미지를 받았습니다.'
-          : '설명은 받았고 카드 이미지는 로컬로 대체했습니다.';
+        if (resultProfile.cardImageUrl) {
+          statusEl.textContent = '설명과 카드 이미지를 받았습니다.';
+        } else if (resultProfile.cardImageError) {
+          statusEl.textContent = `카드 이미지 생성 실패: ${resultProfile.cardImageError}`;
+        } else {
+          statusEl.textContent = '설명은 받았고 카드 이미지는 로컬로 대체했습니다.';
+        }
       } catch (error) {
         const fallback = `연결 실패: ${error.message}\n\n${localText}`;
         explanationEl.textContent = fallback;

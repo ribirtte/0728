@@ -389,7 +389,7 @@ function Invoke-HiggsfieldCard {
   $body = @{
     prompt = ($promptParts -join ' ')
     width_and_height = '1536x2048'
-    quality = '1080p'
+    quality = 'HD'
     enhance_prompt = $false
     batch_size = 1
   } | ConvertTo-Json -Depth 8
@@ -408,7 +408,7 @@ function Invoke-HiggsfieldCard {
   if ([string]::IsNullOrWhiteSpace($status)) { $status = 'queued' }
   $imageUrl = Get-FirstImageUrl -Value $current
 
-  $deadline = (Get-Date).AddSeconds(25)
+  $deadline = (Get-Date).AddSeconds(45)
   while (-not $imageUrl -and $status -notin @('failed', 'nsfw', 'canceled') -and (Get-Date) -lt $deadline -and $statusUrl) {
     Start-Sleep -Seconds 2
     $current = Invoke-RestMethod -Method Get -Uri $statusUrl -Headers $headers -TimeoutSec 10
