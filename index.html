@@ -692,11 +692,24 @@
       saveState();
     }
 
-    function trackGaEvent(action, label) {
+    function getAnalysisClickCount() {
+      const raw = Number(localStorage.getItem('zodiac-analysis-click-count') || '0');
+      return Number.isFinite(raw) ? raw : 0;
+    }
+
+    function bumpAnalysisClickCount() {
+      const next = getAnalysisClickCount() + 1;
+      localStorage.setItem('zodiac-analysis-click-count', String(next));
+      return next;
+    }
+
+    function trackGaEvent(action, label, count) {
       if (typeof window.gtag === 'function') {
         window.gtag('event', action, {
           event_category: 'engagement',
-          event_label: label
+          event_label: label,
+          click_count: count,
+          value: count
         });
       }
     }
@@ -835,7 +848,8 @@
     }
 
     analyzeBtn.addEventListener('click', () => {
-      trackGaEvent('zodiac_analysis_click', '별자리 분석 버튼');
+      const clickCount = bumpAnalysisClickCount();
+      trackGaEvent('zodiac_analysis_click', '별자리 분석 버튼', clickCount);
       analyze();
     });
     resetBtn.addEventListener('click', resetAll);
