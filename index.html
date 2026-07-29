@@ -469,11 +469,11 @@
               <textarea id="question" placeholder="예: 왜 이 번호를 추천했는지 알려줘"></textarea>
             </div>
             <div class="field">
-              <label for="higgsfieldKey1">Higgsfield API Key</label>
+              <label for="higgsfieldKey1">Soul2 API Key</label>
               <input id="higgsfieldKey1" type="password" placeholder="API key" autocomplete="off" />
             </div>
             <div class="field">
-              <label for="higgsfieldKey2">Higgsfield API Secret</label>
+              <label for="higgsfieldKey2">Soul2 API Secret</label>
               <input id="higgsfieldKey2" type="password" placeholder="API secret" autocomplete="off" />
             </div>
             <div class="field full">
@@ -933,13 +933,13 @@
       const higgsfieldApiKey = higgsfieldKey1El.value.trim();
       const higgsfieldApiSecret = higgsfieldKey2El.value.trim();
       if (!higgsfieldApiKey || !higgsfieldApiSecret) {
-        statusEl.textContent = 'Higgsfield API Key와 Secret을 먼저 입력하세요.';
+        statusEl.textContent = 'Soul2 API Key와 Secret을 먼저 입력하세요.';
         explanationEl.textContent = '이미지를 만들려면 앱 안에 키 2개를 넣어야 합니다.';
         return;
       }
       analyzeBtn.disabled = true;
       resetBtn.disabled = true;
-      statusEl.textContent = 'OpenAI와 Higgsfield를 호출하는 중...';
+      statusEl.textContent = 'OpenAI와 Soul2를 호출하는 중...';
       explanationEl.textContent = '설명과 카드 이미지를 동시에 생성하고 있습니다.';
 
       try {

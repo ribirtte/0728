@@ -388,9 +388,10 @@ function Invoke-HiggsfieldCard {
 
   $body = @{
     prompt = ($promptParts -join ' ')
-    num_images = 1
-    resolution = '2K'
-    aspect_ratio = '4:5'
+    width_and_height = '1536x2048'
+    quality = '1080p'
+    enhance_prompt = $false
+    batch_size = 1
   } | ConvertTo-Json -Depth 8
 
   $headers = @{
@@ -399,7 +400,7 @@ function Invoke-HiggsfieldCard {
     'Content-Type' = 'application/json'
   }
 
-  $submit = Invoke-RestMethod -Method Post -Uri 'https://platform.higgsfield.ai/higgsfield-ai/soul/standard' -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 120
+  $submit = Invoke-RestMethod -Method Post -Uri 'https://platform.higgsfield.ai/v1/text2image/soul' -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 20
   $requestId = $submit.request_id
   $statusUrl = if ($submit.status_url) { [string]$submit.status_url } else { "https://platform.higgsfield.ai/requests/$requestId/status" }
   $current = $submit
@@ -410,10 +411,18 @@ function Invoke-HiggsfieldCard {
   $deadline = (Get-Date).AddSeconds(25)
   while (-not $imageUrl -and $status -notin @('failed', 'nsfw', 'canceled') -and (Get-Date) -lt $deadline -and $statusUrl) {
     Start-Sleep -Seconds 2
-    $current = Invoke-RestMethod -Method Get -Uri $statusUrl -Headers $headers -TimeoutSec 120
+    $current = Invoke-RestMethod -Method Get -Uri $statusUrl -Headers $headers -TimeoutSec 10
     $status = Get-HiggsfieldStatus -Value $current
     if ([string]::IsNullOrWhiteSpace($status)) { $status = 'queued' }
     $imageUrl = Get-FirstImageUrl -Value $current
+  }
+
+  if (-not $imageUrl) {
+    if ($status -in @('queued', 'in_progress')) {
+      throw 'Soul2 generation timed out before an image was produced. The account may not have Soul2 access yet, or the model may still be unavailable.'
+    }
+
+    throw "Soul2 generation finished with status '$status' but no image URL was returned."
   }
 
   return @{

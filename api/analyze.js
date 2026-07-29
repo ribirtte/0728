@@ -198,6 +198,19 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function callHiggsfieldCard({ sign, numbers, birthDate, name, question, credentialsPayload = {} }) {
   const { apiKey, apiSecret } = getHiggsfieldCredentials(credentialsPayload);
   if (!apiKey || !apiSecret) {
@@ -215,16 +228,17 @@ async function callHiggsfieldCard({ sign, numbers, birthDate, name, question, cr
     'Content-Type': 'application/json'
   };
 
-  const submitResponse = await fetch('https://platform.higgsfield.ai/higgsfield-ai/soul/standard', {
+  const submitResponse = await fetchWithTimeout('https://platform.higgsfield.ai/v1/text2image/soul', {
     method: 'POST',
     headers: requestHeaders,
     body: JSON.stringify({
       prompt,
-      num_images: 1,
-      resolution: '2K',
-      aspect_ratio: '4:5'
+      width_and_height: '1536x2048',
+      quality: '1080p',
+      enhance_prompt: false,
+      batch_size: 1
     })
-  });
+  }, 20000);
 
   const submitText = await submitResponse.text();
   let submitJson = null;
@@ -249,10 +263,10 @@ async function callHiggsfieldCard({ sign, numbers, birthDate, name, question, cr
   const deadline = Date.now() + 25000;
   while (!imageUrl && status !== 'failed' && status !== 'nsfw' && status !== 'canceled' && Date.now() < deadline && statusUrl) {
     await sleep(2000);
-    const pollResponse = await fetch(statusUrl, {
+    const pollResponse = await fetchWithTimeout(statusUrl, {
       method: 'GET',
       headers: requestHeaders
-    });
+    }, 10000);
 
     const pollText = await pollResponse.text();
     let pollJson = null;
@@ -270,6 +284,13 @@ async function callHiggsfieldCard({ sign, numbers, birthDate, name, question, cr
     current = pollJson || {};
     imageUrl = findFirstImageUrl(current);
     status = getHiggsfieldStatus(current) || status;
+  }
+
+  if (!imageUrl) {
+    const message = status === 'queued' || status === 'in_progress'
+      ? 'Soul2 generation timed out before an image was produced. The account may not have Soul2 access yet, or the model may still be unavailable.'
+      : `Soul2 generation finished with status "${status || 'unknown'}" but no image URL was returned.`;
+    throw new Error(message);
   }
 
   return {
