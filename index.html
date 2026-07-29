@@ -468,6 +468,20 @@
               <label for="question">질문 또는 메모</label>
               <textarea id="question" placeholder="예: 왜 이 번호를 추천했는지 알려줘"></textarea>
             </div>
+            <div class="field">
+              <label for="higgsfieldKey1">Higgsfield Key 1</label>
+              <input id="higgsfieldKey1" type="password" placeholder="첫 번째 키" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label for="higgsfieldKey2">Higgsfield Key 2</label>
+              <input id="higgsfieldKey2" type="password" placeholder="두 번째 키" autocomplete="off" />
+            </div>
+            <div class="field full">
+              <div class="card-hint" style="margin-top:0;">
+                Higgsfield 공식 문서에서는 MCP/CLI 계정 인증이 확인됐고, API 키가 2개라는 내용은 확인되지 않았습니다.
+                그래서 입력칸은 두 개로 열어두고 브라우저 안에만 저장되게 했습니다.
+              </div>
+            </div>
           </div>
 
           <div class="actions">
@@ -584,6 +598,8 @@
     const explanationEl = document.getElementById('explanation');
     const cardPreviewEl = document.getElementById('cardPreview');
     const downloadCardEl = document.getElementById('downloadCard');
+    const higgsfieldKey1El = document.getElementById('higgsfieldKey1');
+    const higgsfieldKey2El = document.getElementById('higgsfieldKey2');
 
     function loadState() {
       try {
@@ -597,7 +613,9 @@
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         birthDate: birthDateEl.value,
         name: nameEl.value,
-        question: questionEl.value
+        question: questionEl.value,
+        higgsfieldKey1: higgsfieldKey1El.value,
+        higgsfieldKey2: higgsfieldKey2El.value
       }));
     }
 
@@ -907,6 +925,8 @@
       birthDateEl.value = '';
       nameEl.value = '';
       questionEl.value = '';
+      higgsfieldKey1El.value = '';
+      higgsfieldKey2El.value = '';
       zodiacGlyphEl.textContent = '?';
       zodiacNameEl.textContent = '별자리를 입력하면 표시됩니다';
       zodiacMetaEl.textContent = '생년월일을 넣고 분석을 누르세요.';
@@ -924,6 +944,8 @@
     if (state.birthDate) birthDateEl.value = state.birthDate;
     if (state.name) nameEl.value = state.name;
     if (state.question) questionEl.value = state.question;
+    if (state.higgsfieldKey1) higgsfieldKey1El.value = state.higgsfieldKey1;
+    if (state.higgsfieldKey2) higgsfieldKey2El.value = state.higgsfieldKey2;
 
     if (birthDateEl.value) {
       const profile = analyzeLocal();
@@ -936,7 +958,7 @@
       analyze();
     });
     resetBtn.addEventListener('click', resetAll);
-    [birthDateEl, nameEl, questionEl].forEach((el) => {
+    [birthDateEl, nameEl, questionEl, higgsfieldKey1El, higgsfieldKey2El].forEach((el) => {
       el.addEventListener('input', saveState);
       el.addEventListener('change', saveState);
     });
