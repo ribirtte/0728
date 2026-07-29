@@ -285,14 +285,10 @@ function Get-HiggsfieldCredentials {
 
   if ($Payload -and $Payload.PSObject.Properties['higgsfieldApiKey'] -and -not [string]::IsNullOrWhiteSpace([string]$Payload.higgsfieldApiKey)) {
     $apiKey = [string]$Payload.higgsfieldApiKey
-  } elseif ($env:HIGGSFIELD_API_KEY) {
-    $apiKey = $env:HIGGSFIELD_API_KEY
   }
 
   if ($Payload -and $Payload.PSObject.Properties['higgsfieldApiSecret'] -and -not [string]::IsNullOrWhiteSpace([string]$Payload.higgsfieldApiSecret)) {
     $apiSecret = [string]$Payload.higgsfieldApiSecret
-  } elseif ($env:HIGGSFIELD_API_SECRET) {
-    $apiSecret = $env:HIGGSFIELD_API_SECRET
   }
 
   return @{

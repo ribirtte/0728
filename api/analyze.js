@@ -98,12 +98,10 @@ function getHiggsfieldCredentials(payload = {}) {
   const apiKey =
     (typeof payload.higgsfieldApiKey === 'string' && payload.higgsfieldApiKey.trim()) ||
     (typeof payload.higgsfieldKey1 === 'string' && payload.higgsfieldKey1.trim()) ||
-    process.env.HIGGSFIELD_API_KEY ||
     '';
   const apiSecret =
     (typeof payload.higgsfieldApiSecret === 'string' && payload.higgsfieldApiSecret.trim()) ||
     (typeof payload.higgsfieldKey2 === 'string' && payload.higgsfieldKey2.trim()) ||
-    process.env.HIGGSFIELD_API_SECRET ||
     '';
 
   return { apiKey, apiSecret };

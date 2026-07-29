@@ -932,6 +932,11 @@
       const question = questionEl.value.trim();
       const higgsfieldApiKey = higgsfieldKey1El.value.trim();
       const higgsfieldApiSecret = higgsfieldKey2El.value.trim();
+      if (!higgsfieldApiKey || !higgsfieldApiSecret) {
+        statusEl.textContent = 'Higgsfield API Key와 Secret을 먼저 입력하세요.';
+        explanationEl.textContent = '이미지를 만들려면 앱 안에 키 2개를 넣어야 합니다.';
+        return;
+      }
       analyzeBtn.disabled = true;
       resetBtn.disabled = true;
       statusEl.textContent = 'OpenAI와 Higgsfield를 호출하는 중...';
