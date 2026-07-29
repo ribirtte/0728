@@ -549,7 +549,7 @@
   </main>
 
   <script>
-    const STORAGE_KEY = 'zodiac-chatbot-state-v4';
+    const STORAGE_KEY = 'zodiac-chatbot-state-v5';
     const LOCAL_API_URL = 'http://localhost:8787/api/analyze';
     const apiUrl = location.protocol === 'file:' ? LOCAL_API_URL : '/api/analyze';
 
@@ -602,19 +602,11 @@
     const higgsfieldKey2El = document.getElementById('higgsfieldKey2');
 
     function loadState() {
-      try {
-        return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-      } catch {
-        return {};
-      }
+      return {};
     }
 
     function saveState() {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        birthDate: birthDateEl.value,
-        name: nameEl.value,
-        question: questionEl.value
-      }));
+      void STORAGE_KEY;
     }
 
     function parseBirthDate(value) {
@@ -681,7 +673,7 @@
       const path = points.map(([x, y]) => `${x},${y}`).join(' ');
       const dots = points.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="3.8" fill="${sign.color}" />`).join('');
       return `
-        <svg viewBox="0 0 200 120" role="img" aria-label="${sign.name} 蹂꾩옄由?紐⑥뼇">
+        <svg viewBox="0 0 200 120" role="img" aria-label="${sign.name} 별자리">
           <rect width="200" height="120" fill="#eef4ff"></rect>
           <polyline points="${path}" fill="none" stroke="${sign.color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></polyline>
           ${dots}
@@ -694,7 +686,7 @@
       const numbers = profile.numbers;
       const accent = sign.color;
       const title = sign.name;
-      const subtitle = profile.name ? `${profile.name}?섏쓽 蹂꾩옄由?移대뱶` : '蹂꾩옄由?移대뱶';
+      const subtitle = profile.name ? `${profile.name}님의 별자리 카드` : '별자리 카드';
       const numberChips = numbers.map((n, i) => `
         <g transform="translate(${160 + i * 114}, 960)">
           <rect x="0" y="0" rx="18" ry="18" width="94" height="50" fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.18)"></rect>
@@ -758,7 +750,7 @@
           <text x="44" y="70" font-size="26" font-weight="800" fill="#f6d57a">CONSTELLATION</text>
           <text x="44" y="112" font-size="60" font-weight="900" fill="#f5f1e8">${sign.name}</text>
           <text x="44" y="162" font-size="24" fill="#c9d4e3">${profile.dateLabel}</text>
-          <text x="44" y="206" font-size="22" fill="#c9d4e3">?먯냼: ${sign.element}</text>
+          <text x="44" y="206" font-size="22" fill="#c9d4e3">요소: ${sign.element}</text>
           <g transform="translate(520, 38)">
             <rect width="390" height="280" rx="28" fill="#eef4ff" />
             <polyline points="${path}" fill="none" stroke="${accent}" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" />
@@ -767,16 +759,16 @@
         </g>
 
         <g transform="translate(110, 880)">
-          <text x="0" y="0" font-size="30" font-weight="800" fill="#23313f">LUCKY NUMBERS</text>
+          <text x="0" y="0" font-size="30" font-weight="800" fill="#23313f">추천 번호</text>
           ${numberChips}
         </g>
 
         <g transform="translate(110, 1095)">
           <rect width="980" height="250" rx="30" fill="rgba(255,255,255,0.22)" />
-          <text x="34" y="58" font-size="28" font-weight="800" fill="#18232f">Why these numbers?</text>
-          <text x="34" y="108" font-size="22" fill="#304050">${hint || '?앸뀈?붿씪???먮쫫怨?蹂꾩옄由?怨좎쑀???⑦꽩???욎뼱??戮묒븯?듬땲??'}</text>
-          <text x="34" y="154" font-size="22" fill="#304050">??移대뱶??寃곌낵瑜???ν븯嫄곕굹 怨듭쑀?섍린 醫뗪쾶 留뚮뱺 誘몃━蹂닿린?낅땲??</text>
-          <text x="34" y="205" font-size="22" fill="#304050">Model note: local visual renderer fallback.</text>
+          <text x="34" y="58" font-size="28" font-weight="800" fill="#18232f">왜 이 번호들인가요?</text>
+          <text x="34" y="108" font-size="22" fill="#304050">${hint || '생년월일과 별자리 흐름을 바탕으로 추천 번호를 골랐습니다.'}</text>
+          <text x="34" y="154" font-size="22" fill="#304050">카드는 로컬 렌더러로 생성된 미리보기입니다.</text>
+          <text x="34" y="205" font-size="22" fill="#304050">Soul2 이미지가 오면 이 미리보기를 교체합니다.</text>
         </g>
       </svg>`;
     }
@@ -924,7 +916,7 @@
     async function analyzeEnhanced() {
       const profile = analyzeLocal();
       if (!profile) {
-        statusEl.textContent = '초기화 완료';
+        statusEl.textContent = '생년월일을 먼저 입력하세요.';
         return;
       }
 
@@ -932,20 +924,30 @@
       const question = questionEl.value.trim();
       const higgsfieldApiKey = higgsfieldKey1El.value.trim();
       const higgsfieldApiSecret = higgsfieldKey2El.value.trim();
+      const localText = localExplanation(profile);
+      explanationEl.textContent = localText;
+      renderCard(profile, localText);
+      statusEl.textContent = '로컬 분석 결과를 먼저 보여줍니다.';
+
       if (!higgsfieldApiKey || !higgsfieldApiSecret) {
-        statusEl.textContent = 'Soul2 API Key와 Secret을 먼저 입력하세요.';
-        explanationEl.textContent = '이미지를 만들려면 앱 안에 키 2개를 넣어야 합니다.';
+        statusEl.textContent = '로컬 분석 완료';
+        saveState();
         return;
       }
+
       analyzeBtn.disabled = true;
       resetBtn.disabled = true;
-      statusEl.textContent = 'OpenAI와 Soul2를 호출하는 중...';
-      explanationEl.textContent = '설명과 카드 이미지를 동시에 생성하고 있습니다.';
+      statusEl.textContent = '서버 연결을 시도하는 중...';
+      explanationEl.textContent = '로컬 결과를 유지한 채 서버 응답을 기다리고 있습니다.';
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
 
       try {
         const response = await fetch(apiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
           body: JSON.stringify({
             birthDate: birthDateEl.value,
             name: nameEl.value.trim(),
@@ -983,11 +985,14 @@
           ? '설명과 카드 이미지를 받았습니다.'
           : '설명은 받았고 카드 이미지는 로컬로 대체했습니다.';
       } catch (error) {
-        const fallback = `연결 실패: ${error.message}\n\n${localExplanation(profile)}`;
+        const fallback = `연결 실패: ${error.message}\n\n${localText}`;
         explanationEl.textContent = fallback;
         renderCard(profile, fallback);
-        statusEl.textContent = '로컬 카드로 대체했습니다.';
+        statusEl.textContent = error.name === 'AbortError'
+          ? '응답이 늦어서 로컬 카드로 유지했습니다.'
+          : '서버 실패로 로컬 카드로 대체했습니다.';
       } finally {
+        clearTimeout(timeoutId);
         analyzeBtn.disabled = false;
         resetBtn.disabled = false;
         saveState();
@@ -1011,15 +1016,6 @@
       downloadCardEl.href = '#';
       statusEl.textContent = '초기화 완료';
       saveState();
-    }
-
-    const state = loadState();
-    if (state.birthDate) birthDateEl.value = state.birthDate;
-    if (state.name) nameEl.value = state.name;
-    if (state.question) questionEl.value = state.question;
-    if (birthDateEl.value) {
-      const profile = analyzeLocal();
-      if (profile) renderBase(profile);
     }
 
     analyzeBtn.addEventListener('click', () => {
