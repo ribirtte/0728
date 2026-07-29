@@ -692,6 +692,15 @@
       saveState();
     }
 
+    function trackGaEvent(action, label) {
+      if (typeof window.gtag === 'function') {
+        window.gtag('event', action, {
+          event_category: 'engagement',
+          event_label: label
+        });
+      }
+    }
+
     function analyzeLocal() {
       const date = parseBirthDate(birthDateEl.value);
       if (!date) return null;
@@ -825,7 +834,10 @@
       if (profile) applyProfile(profile);
     }
 
-    analyzeBtn.addEventListener('click', analyze);
+    analyzeBtn.addEventListener('click', () => {
+      trackGaEvent('zodiac_analysis_click', '별자리 분석 버튼');
+      analyze();
+    });
     resetBtn.addEventListener('click', resetAll);
     [birthDateEl, nameEl, questionEl].forEach((el) => {
       el.addEventListener('input', saveState);
