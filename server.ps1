@@ -277,6 +277,159 @@ function Get-ConstellationSvg {
 "@
 }
 
+function Get-HiggsfieldCredentials {
+  param([object]$Payload)
+
+  $apiKey = $null
+  $apiSecret = $null
+
+  if ($Payload -and $Payload.PSObject.Properties['higgsfieldApiKey'] -and -not [string]::IsNullOrWhiteSpace([string]$Payload.higgsfieldApiKey)) {
+    $apiKey = [string]$Payload.higgsfieldApiKey
+  } elseif ($env:HIGGSFIELD_API_KEY) {
+    $apiKey = $env:HIGGSFIELD_API_KEY
+  }
+
+  if ($Payload -and $Payload.PSObject.Properties['higgsfieldApiSecret'] -and -not [string]::IsNullOrWhiteSpace([string]$Payload.higgsfieldApiSecret)) {
+    $apiSecret = [string]$Payload.higgsfieldApiSecret
+  } elseif ($env:HIGGSFIELD_API_SECRET) {
+    $apiSecret = $env:HIGGSFIELD_API_SECRET
+  }
+
+  return @{
+    apiKey = $apiKey
+    apiSecret = $apiSecret
+  }
+}
+
+function Get-FirstImageUrl {
+  param([object]$Value)
+
+  if ($null -eq $Value) { return $null }
+  if ($Value -is [string] -and $Value -match '^https?://') { return $Value }
+
+  $directKeys = @('url', 'image_url', 'imageUrl', 'resultImageUrl', 'result_image_url', 'output_url', 'outputUrl')
+  foreach ($key in $directKeys) {
+    if ($Value.PSObject -and $Value.PSObject.Properties[$key]) {
+      $candidate = [string]$Value.$key
+      if (-not [string]::IsNullOrWhiteSpace($candidate) -and $candidate -match '^https?://') {
+        return $candidate
+      }
+    }
+  }
+
+  if ($Value -is [System.Array]) {
+    foreach ($item in $Value) {
+      $url = Get-FirstImageUrl -Value $item
+      if ($url) { return $url }
+    }
+  }
+
+  if ($Value.PSObject) {
+    foreach ($prop in $Value.PSObject.Properties) {
+      if ($prop.Value -is [System.Array] -or $prop.Value -is [pscustomobject]) {
+        $url = Get-FirstImageUrl -Value $prop.Value
+        if ($url) { return $url }
+      }
+    }
+  }
+
+  return $null
+}
+
+function Get-HiggsfieldStatus {
+  param([object]$Value)
+  if ($null -eq $Value) { return '' }
+  foreach ($key in @('status', 'state', 'phase')) {
+    if ($Value.PSObject -and $Value.PSObject.Properties[$key]) {
+      $status = [string]$Value.$key
+      if (-not [string]::IsNullOrWhiteSpace($status)) {
+        return $status.ToLowerInvariant()
+      }
+    }
+  }
+  return ''
+}
+
+function Invoke-HiggsfieldCard {
+  param(
+    [object]$Payload,
+    [hashtable]$Profile
+  )
+
+  $creds = Get-HiggsfieldCredentials -Payload $Payload
+  if ([string]::IsNullOrWhiteSpace($creds.apiKey) -or [string]::IsNullOrWhiteSpace($creds.apiSecret)) {
+    return @{
+      skipped = $true
+      status = 'missing_credentials'
+      imageUrl = $null
+    }
+  }
+
+  $question = ''
+  if ($Payload -and $Payload.PSObject.Properties['question']) {
+    $question = [string]$Payload.question
+  }
+
+  $name = ''
+  if ($Payload -and $Payload.PSObject.Properties['name']) {
+    $name = [string]$Payload.name
+  }
+
+  $namePart = if ([string]::IsNullOrWhiteSpace($name)) { 'for the user' } else { "for $name" }
+
+  $promptParts = @(
+    "Create a premium vertical zodiac card $namePart."
+    'Follow the Soul 2 editorial style with premium fashion-card energy.'
+    'Use a creamy ivory, gold, and warm amber palette with a polished casino-luxury feel.'
+    "Theme the artwork around the zodiac sign $($Profile.signName) and a refined constellation motif."
+    'Center a cute but elegant mascot-like emblem inspired by the zodiac, with glossy highlights and soft depth.'
+    'Make it look like a collectible fortune card, clean composition, subtle sparkles, circular halo framing, and editorial lighting.'
+    'Portrait orientation, high detail, no watermark, no extra logos, no UI mockup, no collage.'
+    'Avoid long readable text inside the image; keep the design visually strong on its own.'
+    "Birthdate: $($Profile.birthDate). Lucky numbers: $($Profile.numbers -join ', ')."
+    ("The user question is: $question." )
+  )
+
+  $body = @{
+    prompt = ($promptParts -join ' ')
+    num_images = 1
+    resolution = '2K'
+    aspect_ratio = '4:5'
+  } | ConvertTo-Json -Depth 8
+
+  $headers = @{
+    Authorization = "Key $($creds.apiKey):$($creds.apiSecret)"
+    Accept = 'application/json'
+    'Content-Type' = 'application/json'
+  }
+
+  $submit = Invoke-RestMethod -Method Post -Uri 'https://platform.higgsfield.ai/higgsfield-ai/soul/standard' -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 120
+  $requestId = $submit.request_id
+  $statusUrl = if ($submit.status_url) { [string]$submit.status_url } else { "https://platform.higgsfield.ai/requests/$requestId/status" }
+  $current = $submit
+  $status = Get-HiggsfieldStatus -Value $current
+  if ([string]::IsNullOrWhiteSpace($status)) { $status = 'queued' }
+  $imageUrl = Get-FirstImageUrl -Value $current
+
+  $deadline = (Get-Date).AddSeconds(25)
+  while (-not $imageUrl -and $status -notin @('failed', 'nsfw', 'canceled') -and (Get-Date) -lt $deadline -and $statusUrl) {
+    Start-Sleep -Seconds 2
+    $current = Invoke-RestMethod -Method Get -Uri $statusUrl -Headers $headers -TimeoutSec 120
+    $status = Get-HiggsfieldStatus -Value $current
+    if ([string]::IsNullOrWhiteSpace($status)) { $status = 'queued' }
+    $imageUrl = Get-FirstImageUrl -Value $current
+  }
+
+  return @{
+    skipped = $false
+    requestId = $requestId
+    statusUrl = $statusUrl
+    status = $status
+    imageUrl = $imageUrl
+    raw = $current
+  }
+}
+
 if (-not (Test-Path $indexPath)) {
   throw "index.html not found at $indexPath"
 }
@@ -353,11 +506,28 @@ try {
         $sign = Get-ZodiacSign -Date $date
         $numbers = Get-LuckyNumbers -Date $date -Sign $sign
         $model = if ($payload.model) { [string]$payload.model } else { $defaultModel }
-        $explanation = Invoke-OpenAIReply -Model $model -Profile @{
+
+        $profileForPrompt = @{
           birthDate = $payload.birthDate
           signKey = $sign.key
+          signName = $sign.name
           numbers = @($numbers)
-        } -Question ([string]$payload.question)
+        }
+
+        $higgsfield = $null
+        try {
+          $higgsfield = Invoke-HiggsfieldCard -Payload $payload -Profile $profileForPrompt
+        } catch {
+          $higgsfield = @{
+            skipped = $false
+            requestId = $null
+            statusUrl = $null
+            status = 'failed'
+            imageUrl = $null
+            error = $_.Exception.Message
+          }
+        }
+        $explanation = Invoke-OpenAIReply -Model $model -Profile $profileForPrompt -Question ([string]$payload.question)
 
         $response = @{
           profile = @{
@@ -365,6 +535,10 @@ try {
             signKey = $sign.key
             numbers = @($numbers)
             constellationSvg = (Get-ConstellationSvg -Key $sign.key -Color '#3d4f97')
+            higgsfieldStatus = $higgsfield.status
+            higgsfieldRequestId = $higgsfield.requestId
+            cardImageUrl = $higgsfield.imageUrl
+            cardImageError = if ($higgsfield.error) { $higgsfield.error } else { $null }
           }
           explanation = $explanation
         } | ConvertTo-Json -Depth 8

@@ -94,6 +94,196 @@ function buildConstellationSvg(sign) {
   `;
 }
 
+function getHiggsfieldCredentials(payload = {}) {
+  const apiKey =
+    (typeof payload.higgsfieldApiKey === 'string' && payload.higgsfieldApiKey.trim()) ||
+    (typeof payload.higgsfieldKey1 === 'string' && payload.higgsfieldKey1.trim()) ||
+    process.env.HIGGSFIELD_API_KEY ||
+    '';
+  const apiSecret =
+    (typeof payload.higgsfieldApiSecret === 'string' && payload.higgsfieldApiSecret.trim()) ||
+    (typeof payload.higgsfieldKey2 === 'string' && payload.higgsfieldKey2.trim()) ||
+    process.env.HIGGSFIELD_API_SECRET ||
+    '';
+
+  return { apiKey, apiSecret };
+}
+
+function buildHiggsfieldPrompt({ sign, numbers, birthDate, name, question }) {
+  const namePart = name ? `for ${name}` : 'for the user';
+  const questionPart = question ? `The user question is: ${question}.` : 'No additional user question was provided.';
+  return [
+    `Create a premium vertical zodiac card ${namePart}.`,
+    'Follow the Soul 2 editorial style with premium fashion-card energy.',
+    'Use a creamy ivory, gold, and warm amber palette with a polished casino-luxury feel.',
+    `Theme the artwork around the zodiac sign ${sign.name} (${sign.glyph}) and a refined constellation motif.`,
+    'Center a cute but elegant mascot-like emblem inspired by the zodiac, with glossy highlights and soft depth.',
+    'Make it look like a collectible fortune card, clean composition, subtle sparkles, circular halo framing, and editorial lighting.',
+    'Portrait orientation, high detail, no watermark, no extra logos, no UI mockup, no collage.',
+    'Avoid long readable text inside the image; keep the design visually strong on its own.',
+    `Birthdate: ${birthDate}. Lucky numbers: ${numbers.join(', ')}.`,
+    questionPart
+  ].join(' ');
+}
+
+function findFirstImageUrl(value, seen = new Set()) {
+  if (!value || typeof value !== 'object' || seen.has(value)) {
+    return null;
+  }
+
+  seen.add(value);
+
+  const directKeys = ['url', 'image_url', 'imageUrl', 'resultImageUrl', 'result_image_url', 'output_url', 'outputUrl'];
+  for (const key of directKeys) {
+    const candidate = value[key];
+    if (typeof candidate === 'string' && /^https?:\/\//i.test(candidate)) {
+      return candidate;
+    }
+  }
+
+  if (Array.isArray(value.images)) {
+    for (const image of value.images) {
+      const url = findFirstImageUrl(image, seen);
+      if (url) return url;
+    }
+  }
+
+  if (Array.isArray(value.results)) {
+    for (const result of value.results) {
+      const url = findFirstImageUrl(result, seen);
+      if (url) return url;
+    }
+  }
+
+  if (value.results && typeof value.results === 'object') {
+    const url = findFirstImageUrl(value.results, seen);
+    if (url) return url;
+  }
+
+  if (value.raw && typeof value.raw === 'object') {
+    const url = findFirstImageUrl(value.raw, seen);
+    if (url) return url;
+  }
+
+  if (value.data && typeof value.data === 'object') {
+    const url = findFirstImageUrl(value.data, seen);
+    if (url) return url;
+  }
+
+  for (const key of Object.keys(value)) {
+    const child = value[key];
+    if (child && typeof child === 'object') {
+      const url = findFirstImageUrl(child, seen);
+      if (url) return url;
+    }
+  }
+
+  return null;
+}
+
+function getHiggsfieldStatus(value) {
+  if (!value || typeof value !== 'object') return '';
+
+  const direct = [value.status, value.state, value.phase]
+    .find((item) => typeof item === 'string' && item.trim());
+  if (direct) return direct.trim().toLowerCase();
+
+  if (value.data && typeof value.data === 'object') {
+    const nested = getHiggsfieldStatus(value.data);
+    if (nested) return nested;
+  }
+
+  return '';
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function callHiggsfieldCard({ sign, numbers, birthDate, name, question, credentialsPayload = {} }) {
+  const { apiKey, apiSecret } = getHiggsfieldCredentials(credentialsPayload);
+  if (!apiKey || !apiSecret) {
+    return {
+      skipped: true,
+      error: 'Higgsfield API key/secret missing',
+      imageUrl: null
+    };
+  }
+
+  const prompt = buildHiggsfieldPrompt({ sign, numbers, birthDate, name, question });
+  const requestHeaders = {
+    Authorization: `Key ${apiKey}:${apiSecret}`,
+    Accept: 'application/json',
+    'Content-Type': 'application/json'
+  };
+
+  const submitResponse = await fetch('https://platform.higgsfield.ai/higgsfield-ai/soul/standard', {
+    method: 'POST',
+    headers: requestHeaders,
+    body: JSON.stringify({
+      prompt,
+      num_images: 1,
+      resolution: '2K',
+      aspect_ratio: '4:5'
+    })
+  });
+
+  const submitText = await submitResponse.text();
+  let submitJson = null;
+  try {
+    submitJson = submitText ? JSON.parse(submitText) : null;
+  } catch {
+    submitJson = null;
+  }
+
+  if (!submitResponse.ok) {
+    const detail = (submitJson && (submitJson.error || submitJson.message)) || submitText || 'Unknown Higgsfield submit error';
+    throw new Error(`Higgsfield request failed with status ${submitResponse.status}: ${detail}`);
+  }
+
+  const requestId = submitJson?.request_id || submitJson?.requestId || submitJson?.id || null;
+  const statusUrl = submitJson?.status_url || submitJson?.statusUrl || (requestId ? `https://platform.higgsfield.ai/requests/${requestId}/status` : null);
+
+  let current = submitJson || {};
+  let imageUrl = findFirstImageUrl(current);
+  let status = getHiggsfieldStatus(current) || 'queued';
+
+  const deadline = Date.now() + 25000;
+  while (!imageUrl && status !== 'failed' && status !== 'nsfw' && status !== 'canceled' && Date.now() < deadline && statusUrl) {
+    await sleep(2000);
+    const pollResponse = await fetch(statusUrl, {
+      method: 'GET',
+      headers: requestHeaders
+    });
+
+    const pollText = await pollResponse.text();
+    let pollJson = null;
+    try {
+      pollJson = pollText ? JSON.parse(pollText) : null;
+    } catch {
+      pollJson = null;
+    }
+
+    if (!pollResponse.ok) {
+      const detail = (pollJson && (pollJson.error || pollJson.message)) || pollText || 'Unknown Higgsfield status error';
+      throw new Error(`Higgsfield status polling failed with status ${pollResponse.status}: ${detail}`);
+    }
+
+    current = pollJson || {};
+    imageUrl = findFirstImageUrl(current);
+    status = getHiggsfieldStatus(current) || status;
+  }
+
+  return {
+    skipped: false,
+    requestId,
+    statusUrl,
+    status,
+    imageUrl,
+    raw: current
+  };
+}
+
 function getOpenAIConfig() {
   return {
     apiKey: process.env.OPENAI_API_KEY || '',
@@ -215,24 +405,46 @@ module.exports = async function handler(req, res) {
   const numbers = deriveNumbers(date, sign);
   const model = process.env.OPENAI_MODEL || 'gpt-5.4-mini';
 
-  let explanation;
-  try {
-    explanation = await callOpenAI({
+  const [higgsfieldResult, openAiResult] = await Promise.allSettled([
+    callHiggsfieldCard({
+      sign,
+      numbers,
+      birthDate: payload.birthDate,
+      name: payload.name || '',
+      question: payload.question || '',
+      credentialsPayload: payload
+    }),
+    callOpenAI({
       model,
       birthDate: payload.birthDate,
       zodiacKey: sign.key,
       numbers,
       question: payload.question
-    });
-  } catch (error) {
+    })
+  ]);
+
+  let explanation;
+  if (openAiResult.status === 'fulfilled') {
+    explanation = openAiResult.value;
+  } else {
+    const error = openAiResult.reason;
     explanation = [
       `${sign.name}`,
       `Lucky numbers: ${numbers.join(', ')}`,
       'The numbers were derived from the birthdate pattern and the zodiac\'s recurring lucky set, then deduplicated and sorted for readability.',
       'OpenAI was not reachable from this server, so I returned a safe local explanation instead.',
-      error.message ? `Debug: ${error.message}` : ''
+      error?.message ? `Debug: ${error.message}` : ''
     ].filter(Boolean).join('\n');
   }
+
+  const higgsfield = higgsfieldResult.status === 'fulfilled'
+    ? higgsfieldResult.value
+    : {
+        skipped: false,
+        imageUrl: null,
+        status: 'failed',
+        error: higgsfieldResult.reason?.message || 'Unknown Higgsfield error'
+      };
 
   const record = {
     birth_date: payload.birthDate,
@@ -246,9 +458,8 @@ module.exports = async function handler(req, res) {
     model
   };
 
-  let inserted = null;
   try {
-    inserted = await saveToSupabase(record);
+    await saveToSupabase(record);
   } catch (error) {
     res.status(500).json({ error: error.message });
     return;
@@ -261,7 +472,10 @@ module.exports = async function handler(req, res) {
       signName: sign.name,
       numbers,
       constellationSvg: buildConstellationSvg(sign),
-      insert: inserted
+      higgsfieldStatus: higgsfield.status,
+      higgsfieldRequestId: higgsfield.requestId || null,
+      cardImageUrl: higgsfield.imageUrl || null,
+      cardImageError: higgsfield.error || null
     },
     explanation
   });

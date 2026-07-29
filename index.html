@@ -469,17 +469,17 @@
               <textarea id="question" placeholder="예: 왜 이 번호를 추천했는지 알려줘"></textarea>
             </div>
             <div class="field">
-              <label for="higgsfieldKey1">Higgsfield Key 1</label>
-              <input id="higgsfieldKey1" type="password" placeholder="첫 번째 키" autocomplete="off" />
+              <label for="higgsfieldKey1">Higgsfield API Key</label>
+              <input id="higgsfieldKey1" type="password" placeholder="API key" autocomplete="off" />
             </div>
             <div class="field">
-              <label for="higgsfieldKey2">Higgsfield Key 2</label>
-              <input id="higgsfieldKey2" type="password" placeholder="두 번째 키" autocomplete="off" />
+              <label for="higgsfieldKey2">Higgsfield API Secret</label>
+              <input id="higgsfieldKey2" type="password" placeholder="API secret" autocomplete="off" />
             </div>
             <div class="field full">
               <div class="card-hint" style="margin-top:0;">
-                Higgsfield 공식 문서에서는 MCP/CLI 계정 인증이 확인됐고, API 키가 2개라는 내용은 확인되지 않았습니다.
-                그래서 입력칸은 두 개로 열어두고 브라우저 안에만 저장되게 했습니다.
+                공식 문서와 API 레퍼런스에서 Higgsfield는 API key + secret 조합으로 인증하는 것으로 확인됩니다.
+                이 값들은 저장하지 않고, 분석 버튼을 눌렀을 때만 서버로 전달됩니다.
               </div>
             </div>
           </div>
@@ -613,9 +613,7 @@
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         birthDate: birthDateEl.value,
         name: nameEl.value,
-        question: questionEl.value,
-        higgsfieldKey1: higgsfieldKey1El.value,
-        higgsfieldKey2: higgsfieldKey2El.value
+        question: questionEl.value
       }));
     }
 
@@ -787,11 +785,13 @@
       return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
     }
 
-    function renderCard(profile, explanation) {
+    function renderCard(profile, explanation, cardImageUrl = '') {
       const svg = buildCardSvg(profile, explanation);
-      const url = svgToDataUrl(svg);
-      cardPreviewEl.src = url;
-      downloadCardEl.href = url;
+      const fallbackUrl = svgToDataUrl(svg);
+      const finalUrl = cardImageUrl || fallbackUrl;
+      cardPreviewEl.src = finalUrl;
+      downloadCardEl.href = finalUrl;
+      downloadCardEl.download = cardImageUrl ? 'zodiac-card.png' : 'zodiac-card.svg';
     }
 
     function renderNumbers(numbers) {
@@ -921,6 +921,74 @@
       }
     }
 
+    async function analyzeEnhanced() {
+      const profile = analyzeLocal();
+      if (!profile) {
+        statusEl.textContent = '생년월일을 먼저 입력하세요.';
+        return;
+      }
+
+      renderBase(profile);
+      const question = questionEl.value.trim();
+      const higgsfieldApiKey = higgsfieldKey1El.value.trim();
+      const higgsfieldApiSecret = higgsfieldKey2El.value.trim();
+      analyzeBtn.disabled = true;
+      resetBtn.disabled = true;
+      statusEl.textContent = 'OpenAI와 Higgsfield를 호출하는 중...';
+      explanationEl.textContent = '설명과 카드 이미지를 동시에 생성하고 있습니다.';
+
+      try {
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            birthDate: birthDateEl.value,
+            name: nameEl.value.trim(),
+            question: question || '생년월일 기반으로 별자리와 추천 번호를 설명해줘.',
+            higgsfieldApiKey,
+            higgsfieldApiSecret
+          })
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data?.error || '서버 호출에 실패했습니다.');
+
+        const resultProfile = data.profile || {};
+        const matchedSign = ZODIAC_SIGNS.find((item) => item.key === resultProfile.signKey) || profile.sign;
+        const numbers = Array.isArray(resultProfile.numbers) && resultProfile.numbers.length
+          ? resultProfile.numbers
+          : profile.numbers;
+
+        const nextProfile = {
+          ...profile,
+          sign: matchedSign,
+          numbers
+        };
+        renderBase(nextProfile);
+        if (resultProfile.constellationSvg) {
+          constellationEl.innerHTML = resultProfile.constellationSvg;
+        }
+
+        const explanation = typeof data.explanation === 'string' && data.explanation.trim()
+          ? data.explanation
+          : localExplanation(nextProfile);
+        explanationEl.textContent = explanation;
+        renderCard(nextProfile, explanation, resultProfile.cardImageUrl || '');
+        statusEl.textContent = resultProfile.cardImageUrl
+          ? '설명과 카드 이미지를 받았습니다.'
+          : '설명은 받았고 카드 이미지는 로컬로 대체했습니다.';
+      } catch (error) {
+        const fallback = `연결 실패: ${error.message}\n\n${localExplanation(profile)}`;
+        explanationEl.textContent = fallback;
+        renderCard(profile, fallback);
+        statusEl.textContent = '로컬 카드로 대체했습니다.';
+      } finally {
+        analyzeBtn.disabled = false;
+        resetBtn.disabled = false;
+        saveState();
+      }
+    }
+
     function resetAll() {
       birthDateEl.value = '';
       nameEl.value = '';
@@ -944,9 +1012,6 @@
     if (state.birthDate) birthDateEl.value = state.birthDate;
     if (state.name) nameEl.value = state.name;
     if (state.question) questionEl.value = state.question;
-    if (state.higgsfieldKey1) higgsfieldKey1El.value = state.higgsfieldKey1;
-    if (state.higgsfieldKey2) higgsfieldKey2El.value = state.higgsfieldKey2;
-
     if (birthDateEl.value) {
       const profile = analyzeLocal();
       if (profile) renderBase(profile);
@@ -955,17 +1020,17 @@
     analyzeBtn.addEventListener('click', () => {
       const clickCount = bumpAnalysisClickCount();
       trackGaEvent('zodiac_analysis_click', '별자리 분석 버튼', clickCount);
-      analyze();
+      analyzeEnhanced();
     });
     resetBtn.addEventListener('click', resetAll);
-    [birthDateEl, nameEl, questionEl, higgsfieldKey1El, higgsfieldKey2El].forEach((el) => {
+    [birthDateEl, nameEl, questionEl].forEach((el) => {
       el.addEventListener('input', saveState);
       el.addEventListener('change', saveState);
     });
 
     questionEl.addEventListener('keydown', (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-        analyze();
+        analyzeEnhanced();
       }
     });
 
